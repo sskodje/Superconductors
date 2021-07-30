@@ -113,7 +113,7 @@ def calculate_epsilon(kx,ky, t, band, spinorbit):
 @jit(nopython = True, nogil = True)
 def select_k_values_soc(kx,ky, N, t, soc, band):
     """
-    Calculates the momentum values innvolved in the Cooper-pair interactions in a given band
+    Calculates the momentum values involved in the Cooper-pair interactions in a given band
 
     Parameters
     ----------
