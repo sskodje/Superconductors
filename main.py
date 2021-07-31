@@ -13,6 +13,8 @@ from timeit import default_timer as timer
 #import calculations as calc
 import calculations_no_abs as calc
 from joblib import Parallel, delayed
+from Band import Band
+
 """
 N gives the size of the grid
 limit is the limit of the momentum values in the first BZ
@@ -86,8 +88,8 @@ def main(delta_i, delta_f, gamma, t, save_plot, spinorbit_initial, spinorbit_que
     
     """Factors describing lattice asymmetry, these may or may not be needed depending on what 
     basis one chooses to work in"""
-    kx_minus, ky_minus = calc.select_k_values_soc(kx, ky, N, 1, spinorbit_initial, "minus")
-    kx_pluss, ky_pluss = calc.select_k_values_soc(kx, ky, N, 1, spinorbit_initial, "pluss")
+    kx_minus, ky_minus = calc.select_k_values_soc(kx, ky, N, 1, spinorbit_initial, Band.MINUS)
+    kx_pluss, ky_pluss = calc.select_k_values_soc(kx, ky, N, 1, spinorbit_initial, Band.PLUS)
    
     gamma_minus = -( (np.sin(ky_minus)+1j*np.sin(kx_minus)) /np.sqrt((np.sin(ky_minus)**2+ np.sin(kx_minus)**2)) )
     gamma_pluss =( (np.sin(ky_pluss)+1j*np.sin(kx_pluss)) /np.sqrt((np.sin(ky_pluss)**2+ np.sin(kx_pluss)**2)) )

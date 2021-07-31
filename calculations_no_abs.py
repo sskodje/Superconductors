@@ -9,6 +9,7 @@ import numpy as np
 from scipy.optimize import fsolve
 from scipy.optimize import dual_annealing
 from numba import jit
+from Band import Band
 
 @jit(nopython = True, nogil = True)
 def calculate_delta_pluss_minus(delta, diag_coupling, off_diag_coupling, epsilon_pluss, epsilon_minus):
@@ -78,7 +79,7 @@ def anneal_delta_pluss_minus(diag_coupling, off_diag_coupling, epsilon_pluss, ep
     return results
 
 @jit(nopython=True)
-def calculate_epsilon(kx,ky, t, band, spinorbit):
+def calculate_epsilon(kx,ky, t, band:Band, spinorbit):
     """
     Calculates the kinetic energy of particles with pseudospinn + (-) on a square lattice
 
@@ -105,13 +106,13 @@ def calculate_epsilon(kx,ky, t, band, spinorbit):
     epsilon_tilde = - 2 * t * (np.cos(kx) + np.cos(ky)) - mu 
     B_k = np.sqrt((np.sin(kx))**2 + (np.sin(ky))**2)
 
-    if band == "pluss":
+    if band == Band.PLUS:
         return epsilon_tilde + spinorbit * B_k
-    if band == "minus":
+    if band == Band.MINUS:
         return epsilon_tilde - spinorbit * B_k
 
 @jit(nopython = True, nogil = True)
-def select_k_values_soc(kx,ky, N, t, soc, band):
+def select_k_values_soc(kx,ky, N, t, soc, band:Band):
     """
     Calculates the momentum values innvolved in the Cooper-pair interactions in a given band
 
@@ -382,16 +383,16 @@ def calculate_initial_values(delta_i, delta_f, gamma, kx, ky, N,t, spinorbit, So
         symmetry factors.
     """
     
-    kx_init, ky_init = select_k_values_soc(kx, ky, N, t, 0, "pluss")
+    kx_init, ky_init = select_k_values_soc(kx, ky, N, t, 0, Band.PLUS)
     
-    startband ="pluss"
+    startband = Band.PLUS
     startspin = 0
     epsilon_solve_init = calculate_epsilon(kx_init,ky_init, t, startband, startspin)
 
     
     
-    kx_pluss, ky_pluss = select_k_values_soc(kx, ky, N, t, spinorbit, "pluss")
-    kx_minus, ky_minus = select_k_values_soc(kx, ky, N, t, spinorbit, "minus")
+    kx_pluss, ky_pluss = select_k_values_soc(kx, ky, N, t, spinorbit, Band.PLUS)
+    kx_minus, ky_minus = select_k_values_soc(kx, ky, N, t, spinorbit, Band.MINUS)
     
     
     gamma_pluss = (np.sin(ky_pluss)+1j*np.sin(kx_pluss)) /np.sqrt((np.sin(ky_pluss)**2 + np.sin(kx_pluss)**2))
@@ -411,11 +412,11 @@ def calculate_initial_values(delta_i, delta_f, gamma, kx, ky, N,t, spinorbit, So
     
     print("lambda", lambda_i, lambda_f)
     
-    epsilon_solve_pluss_init = calculate_epsilon(kx_pluss,ky_pluss,t, "pluss", spinorbit)
-    epsilon_solve_minus_init = calculate_epsilon(kx_minus,ky_minus,t, "minus", spinorbit)
+    epsilon_solve_pluss_init = calculate_epsilon(kx_pluss,ky_pluss,t, Band.PLUS, spinorbit)
+    epsilon_solve_minus_init = calculate_epsilon(kx_minus,ky_minus,t, Band.MINUS, spinorbit)
         
-    epsilon_solve_pluss_quench = calculate_epsilon(kx_pluss,ky_pluss,t, "pluss", SoC_quench)
-    epsilon_solve_minus_quench = calculate_epsilon(kx_minus,ky_minus,t, "minus", SoC_quench)
+    epsilon_solve_pluss_quench = calculate_epsilon(kx_pluss,ky_pluss,t, Band.PLUS, SoC_quench)
+    epsilon_solve_minus_quench = calculate_epsilon(kx_minus,ky_minus,t, Band.MINUS, SoC_quench)
     
     energy_list =[]
     for i in range(10):
@@ -506,7 +507,7 @@ def calculate_initial_values(delta_i, delta_f, gamma, kx, ky, N,t, spinorbit, So
     return delta_i, delta_f, lambda_i, lambda_f, initial_values, arguments
 
 @jit(nopython=True, nogil = True)
-def calculate_delta(F_pluss, F_minus, diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, band):
+def calculate_delta(F_pluss, F_minus, diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, band:Band):
     """
     Calculates the order parameter based on the current value of the anomalous
     Greens function F
@@ -521,7 +522,7 @@ def calculate_delta(F_pluss, F_minus, diag_coupling, off_diag_coupling, gamma_pl
         Coupling strength of interband pair-hopping.
     gamma : Array
         Symmetry factor for the pluss (minus) band.
-    band : String
+    band : Band
         Indicates pluss (minus) band.
     Returns
     -------
@@ -529,9 +530,9 @@ def calculate_delta(F_pluss, F_minus, diag_coupling, off_diag_coupling, gamma_pl
         Gap.
 
     """
-    if band == "pluss":
+    if band == Band.PLUS:
         delta = diag_coupling* np.sum((np.conj(gamma_pluss))*F_pluss)+off_diag_coupling*np.sum((np.conj(gamma_minus))*F_minus)
-    if band == "minus":
+    if band == Band.MINUS:
         delta = off_diag_coupling* np.sum((np.conj(gamma_pluss))*F_pluss)+diag_coupling*np.sum((np.conj(gamma_minus))*F_minus)
     return delta
 
@@ -563,7 +564,7 @@ def calculate_dFdt_pluss(F_pluss, F_minus ,G, coupling, epsilon_solve, gamma_plu
     """
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor 
-    delta_temp = calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, "pluss")
+    delta_temp = calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.PLUS)
     delta_temp = gamma_pluss*delta_temp   ## test if this solves
     prefactor = -1j
     first_factor = 2*(epsilon_solve)*F_pluss
@@ -599,7 +600,7 @@ def calculate_dFdt_minus(F_pluss, F_minus , G, coupling, epsilon_solve, gamma_pl
     """  
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor
-    delta_temp = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, "minus")
+    delta_temp = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.MINUS)
     prefactor = -1j
     first_factor = 2*(epsilon_solve)*F_minus
     second_factor = delta_temp*(2*G-1)
@@ -630,7 +631,7 @@ def calculate_dGdt_pluss(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, o
     """
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor
-    delta = gamma_pluss*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, "pluss")
+    delta = gamma_pluss*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.PLUS)
     prefactor = -1j   
     first_factor = np.conjugate(delta)*F_pluss- delta*np.conjugate(F_pluss)
     dg = prefactor * (first_factor)
@@ -661,7 +662,7 @@ def calculate_dGdt_minus(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, o
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor
 
-    delta = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, "minus")
+    delta = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.MINUS)
     prefactor = -1j   
     first_factor = np.conjugate(delta)*F_minus- delta*np.conjugate(F_minus)
     dg = prefactor * (first_factor)
