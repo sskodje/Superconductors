@@ -537,7 +537,7 @@ def calculate_delta(F_pluss, F_minus, diag_coupling, off_diag_coupling, gamma_pl
     return delta
 
 @jit(nopython=True, nogil = True)
-def calculate_dFdt_pluss(F_pluss, F_minus ,G, coupling, epsilon_solve, gamma_pluss, gamma_minus, off_diag_factor):
+def calculate_dFdt(F_pluss, F_minus ,G, coupling, epsilon_solve, gamma_pluss, gamma_minus, off_diag_factor, band:Band):
     """
     Calculates the derivative of the anomalous Greens function F
 
@@ -555,6 +555,8 @@ def calculate_dFdt_pluss(F_pluss, F_minus ,G, coupling, epsilon_solve, gamma_plu
         Array with symmetry factor.
     off_diag_factor : Float
         Ratio of coupling strength for pair-hopping to intra band pairing.
+    band : Band
+        Indicates pluss (minus) band.
 
     Returns
     -------
@@ -564,51 +566,23 @@ def calculate_dFdt_pluss(F_pluss, F_minus ,G, coupling, epsilon_solve, gamma_plu
     """
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor 
-    delta_temp = calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.PLUS)
-    delta_temp = gamma_pluss*delta_temp   ## test if this solves
+    delta_temp = calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, band)
+    if band == Band.PLUS:
+        delta_temp = delta_temp * gamma_pluss
+        first_factor = 2*(epsilon_solve)*F_pluss
+    elif band == Band.MINUS:
+        delta_temp = delta_temp * gamma_minus
+        first_factor = 2*(epsilon_solve)*F_minus
+    else:
+        raise Exception("Unknown band")
+
     prefactor = -1j
-    first_factor = 2*(epsilon_solve)*F_pluss
     second_factor = delta_temp*(2*G-1)
     dF = prefactor*(first_factor+second_factor)
     return dF
 
 @jit(nopython=True, nogil = True)
-def calculate_dFdt_minus(F_pluss, F_minus , G, coupling, epsilon_solve, gamma_pluss, gamma_minus, off_diag_factor):
-    """
-    Calculates the derivative of the anomalous Greens function F
-
-    Parameters
-    ----------
-    F : Array of floats
-        Current value of F.
-    G : Array of floats
-        Current value of G.
-    coupling : Float
-        Coupling strength.
-    epsilon_solve : Array of floats
-        Free particle kinetic energy.
-    gamma : Array of floats
-        Array with symmetry factor.
-    off_diag_factor : Float
-        Ratio of coupling strength for pair-hopping to intra band pairing.
-
-    Returns
-    -------
-    dF : Array of floats
-        The derivative of F.
-
-    """  
-    diag_coupling = coupling
-    off_diag_coupling = coupling*off_diag_factor
-    delta_temp = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.MINUS)
-    prefactor = -1j
-    first_factor = 2*(epsilon_solve)*F_minus
-    second_factor = delta_temp*(2*G-1)
-    dF = prefactor*(first_factor+second_factor)
-    return dF
-
-@jit(nopython=True, nogil = True)
-def calculate_dGdt_pluss(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor):
+def calculate_dGdt(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor, band:Band):
     """
     Calculates the derivative of the Greens function G
 
@@ -623,6 +597,8 @@ def calculate_dGdt_pluss(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, o
     off_diag_factor : Float
         Coupling factor describing the chance of Cooper pairs hopping to
         a different band.
+    band : Band
+        Indicates pluss (minus) band.
 
     Returns
     -------
@@ -631,40 +607,17 @@ def calculate_dGdt_pluss(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, o
     """
     diag_coupling = coupling
     off_diag_coupling = coupling*off_diag_factor
-    delta = gamma_pluss*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.PLUS)
-    prefactor = -1j   
-    first_factor = np.conjugate(delta)*F_pluss- delta*np.conjugate(F_pluss)
-    dg = prefactor * (first_factor)
-    return dg
-
-@jit(nopython=True, nogil = True)
-def calculate_dGdt_minus(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor):
-    """
-    Calculates the derivative of the Greens function G
-
-    Parameters
-    ----------
-    F_pluss, F_minus : Array of floats
-        Current value of anomalous Greens functions.
-    coupling : Float
-        Coupling strength of Cooper pairs.
-    gamma_minus, gamma_pluss : Array of floats
-        Array describing the symmetry of the crystal lattice.
-    off_diag_factor : Float
-        Coupling factor describing the chance of Cooper pairs hopping to
-        a different band.
-
-    Returns
-    -------
-    Array of floats
-        Derivative of the normal Greens function G.
-    """
-    diag_coupling = coupling
-    off_diag_coupling = coupling*off_diag_factor
-
-    delta = gamma_minus*calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, Band.MINUS)
-    prefactor = -1j   
-    first_factor = np.conjugate(delta)*F_minus- delta*np.conjugate(F_minus)
+    delta = calculate_delta(F_pluss, F_minus ,diag_coupling, off_diag_coupling, gamma_pluss, gamma_minus, band) 
+    if band == Band.PLUS:
+        delta =delta*gamma_pluss  
+        first_factor = np.conjugate(delta)*F_pluss- delta*np.conjugate(F_pluss)
+    elif band == Band.MINUS:
+        delta = delta*gamma_minus
+        first_factor = np.conjugate(delta)*F_minus- delta*np.conjugate(F_minus)
+    else:
+        raise Exception("Unknown band")
+        
+    prefactor = -1j 
     dg = prefactor * (first_factor)
     return dg
 
@@ -690,8 +643,8 @@ def calculate_function_array(y,t,lambda_i,lambda_f, epsilon_solve_pluss_init, ep
     G_pluss = y[2]
     G_minus = y[3]
     
-    dF_pluss =  calculate_dFdt_pluss(F_pluss, F_minus, G_pluss, coupling, epsilon_solve_pluss, gamma_pluss, gamma_minus, off_diag_factor)
-    dF_minus =  calculate_dFdt_minus(F_pluss, F_minus, G_minus, coupling, epsilon_solve_minus, gamma_pluss, gamma_minus, off_diag_factor)
-    dG_pluss =  calculate_dGdt_pluss(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor)
-    dG_minus =  calculate_dGdt_minus(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor)
+    dF_pluss =  calculate_dFdt(F_pluss, F_minus, G_pluss, coupling, epsilon_solve_pluss, gamma_pluss, gamma_minus, off_diag_factor, Band.PLUS)
+    dF_minus =  calculate_dFdt(F_pluss, F_minus, G_minus, coupling, epsilon_solve_minus, gamma_pluss, gamma_minus, off_diag_factor, Band.MINUS)
+    dG_pluss =  calculate_dGdt(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor, Band.PLUS)
+    dG_minus =  calculate_dGdt(F_pluss, F_minus, coupling, gamma_pluss, gamma_minus, off_diag_factor, Band.MINUS)
     return np.array([dF_pluss, dF_minus, dG_pluss, dG_minus])
